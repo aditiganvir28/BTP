@@ -60,9 +60,9 @@ HOSTNAME = socket.gethostname()
 
 # ModelNet40 official train/test split
 TRAIN_FILES = provider.getDataFiles( \
-    os.path.join(BASE_DIR, '/kaggle/input/modelnet40-ply-hdf5-2048/train_files.txt'))
+    os.path.join(BASE_DIR, '/content/drive/My Drive/modelnet40-ply-hdf5-2048/train_files.txt'))
 TEST_FILES = provider.getDataFiles(\
-    os.path.join(BASE_DIR, '/kaggle/input/modelnet40-ply-hdf5-2048/test_files.txt'))
+    os.path.join(BASE_DIR, '/content/drive/My Drive/modelnet40-ply-hdf5-2048/test_files.txt'))
 
 def rotate_point_cloud(batch_data):
     """ Randomly rotate the point clouds to augment the dataset
