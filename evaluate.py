@@ -7,6 +7,9 @@ import time
 import os
 import scipy.misc
 import sys
+import imageio
+import PIL.Image as Image  # Added import for image processing
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
 sys.path.append(os.path.join(BASE_DIR, 'models'))
@@ -30,7 +33,7 @@ BATCH_SIZE = FLAGS.batch_size
 NUM_POINT = FLAGS.num_point
 MODEL_PATH = FLAGS.model_path
 GPU_INDEX = FLAGS.gpu
-MODEL = importlib.import_module(FLAGS.model) # import network module
+MODEL = importlib.import_module(FLAGS.model)  # import network module
 DUMP_DIR = FLAGS.dump_dir
 if not os.path.exists(DUMP_DIR): os.mkdir(DUMP_DIR)
 LOG_FOUT = open(os.path.join(DUMP_DIR, 'log_evaluate.txt'), 'w')
@@ -113,9 +116,9 @@ def eval_one_epoch(sess, ops, num_votes=1, topk=1):
             cur_batch_size = end_idx - start_idx
             
             # Aggregating BEG
-            batch_loss_sum = 0 # sum of losses for the batch
-            batch_pred_sum = np.zeros((cur_batch_size, NUM_CLASSES)) # score for classes
-            batch_pred_classes = np.zeros((cur_batch_size, NUM_CLASSES)) # 0/1 for classes
+            batch_loss_sum = 0  # sum of losses for the batch
+            batch_pred_sum = np.zeros((cur_batch_size, NUM_CLASSES))  # score for classes
+            batch_pred_classes = np.zeros((cur_batch_size, NUM_CLASSES))  # 0/1 for classes
             for vote_idx in range(num_votes):
                 rotated_data = provider.rotate_point_cloud_by_angle(current_data[start_idx:end_idx, :, :],
                                                   vote_idx/float(num_votes) * np.pi * 2)
@@ -146,19 +149,31 @@ def eval_one_epoch(sess, ops, num_votes=1, topk=1):
                 total_correct_class[l] += (pred_val[i-start_idx] == l)
                 fout.write('%d, %d\n' % (pred_val[i-start_idx], l))
                 
-                if pred_val[i-start_idx] != l and FLAGS.visu: # ERROR CASE, DUMP!
+                if pred_val[i-start_idx] != l and FLAGS.visu:  # ERROR CASE, DUMP!
                     img_filename = '%d_label_%s_pred_%s.jpg' % (error_cnt, SHAPE_NAMES[l],
-                                                           SHAPE_NAMES[pred_val[i-start_idx]])
+                                                               SHAPE_NAMES[pred_val[i-start_idx]])
                     img_filename = os.path.join(DUMP_DIR, img_filename)
                     output_img = pc_util.point_cloud_three_views(np.squeeze(current_data[i, :, :]))
-                    scipy.misc.imsave(img_filename, output_img)
+                    
+                    # Convert output_img to a format suitable for saving
+                    if output_img.dtype == np.float32:
+                        # Normalize and convert to uint8
+                        output_img = (255 * (output_img - np.min(output_img)) / np.ptp(output_img)).astype(np.uint8)
+                    
+                    # If output_img is grayscale
+                    if len(output_img.shape) == 2:  # Grayscale
+                        output_img = Image.fromarray(output_img, mode='L')
+                    else:  # Color (RGB)
+                        output_img = Image.fromarray(output_img, mode='RGB')
+                    
+                    output_img.save(img_filename)
                     error_cnt += 1
                 
     log_string('eval mean loss: %f' % (loss_sum / float(total_seen)))
     log_string('eval accuracy: %f' % (total_correct / float(total_seen)))
-    log_string('eval avg class acc: %f' % (np.mean(np.array(total_correct_class)/np.array(total_seen_class,dtype=np.float))))
+    log_string('eval avg class acc: %f' % (np.mean(np.array(total_correct_class)/np.array(total_seen_class, dtype=np.float))))
     
-    class_accuracies = np.array(total_correct_class)/np.array(total_seen_class,dtype=np.float)
+    class_accuracies = np.array(total_correct_class) / np.array(total_seen_class, dtype=np.float)
     for i, name in enumerate(SHAPE_NAMES):
         log_string('%10s:\t%0.3f' % (name, class_accuracies[i]))
     

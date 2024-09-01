@@ -19,9 +19,9 @@ parser.add_argument('--gpu', type=int, default=0, help='GPU to use [default: GPU
 parser.add_argument('--model', default='pointnet_cls', help='Model name: pointnet_cls or pointnet_cls_basic [default: pointnet_cls]')
 parser.add_argument('--log_dir', default='log', help='Log dir [default: log]')
 parser.add_argument('--num_point', type=int, default=1024, help='Point Number [256/512/1024/2048] [default: 1024]')
-parser.add_argument('--max_epoch', type=int, default=250, help='Epoch to run [default: 250]')
+parser.add_argument('--max_epoch', type=int, default=300, help='Epoch to run [default: 250]')
 parser.add_argument('--batch_size', type=int, default=32, help='Batch Size during training [default: 32]')
-parser.add_argument('--learning_rate', type=float, default=0.001, help='Initial learning rate [default: 0.001]')
+parser.add_argument('--learning_rate', type=float, default=0.0005, help='Initial learning rate [default: 0.001]')
 parser.add_argument('--momentum', type=float, default=0.9, help='Initial learning rate [default: 0.9]')
 parser.add_argument('--optimizer', default='adam', help='adam or momentum [default: adam]')
 parser.add_argument('--decay_step', type=int, default=200000, help='Decay step for lr decay [default: 200000]')
@@ -63,6 +63,40 @@ TRAIN_FILES = provider.getDataFiles( \
     os.path.join(BASE_DIR, 'data/modelnet40_ply_hdf5_2048/train_files.txt'))
 TEST_FILES = provider.getDataFiles(\
     os.path.join(BASE_DIR, 'data/modelnet40_ply_hdf5_2048/test_files.txt'))
+
+def rotate_point_cloud(batch_data):
+    """ Randomly rotate the point clouds to augment the dataset
+        rotation is per shape based along up direction
+        Input:
+          BxNx3 array, original batch of point clouds
+        Return:
+          BxNx3 array, rotated batch of point clouds
+    """
+    rotated_data = np.zeros(batch_data.shape, dtype=np.float32)
+    for k in range(batch_data.shape[0]):
+        rotation_angle = np.random.uniform() * 2 * np.pi
+        cosval = np.cos(rotation_angle)
+        sinval = np.sin(rotation_angle)
+        rotation_matrix = np.array([[cosval, 0, sinval],
+                                    [0, 1, 0],
+                                    [-sinval, 0, cosval]])
+        shape_pc = batch_data[k, ...]
+        rotated_data[k, ...] = np.dot(shape_pc.reshape((-1, 3)), rotation_matrix)
+    return rotated_data
+
+def jitter_point_cloud(batch_data, sigma=0.01, clip=0.05):
+    """ Randomly jitter points. jittering is per point.
+        Input:
+          BxNx3 array, original batch of point clouds
+        Return:
+          BxNx3 array, jittered batch of point clouds
+    """
+    B, N, C = batch_data.shape
+    assert(clip > 0)
+    jittered_data = np.clip(sigma * np.random.randn(B, N, C), -1*clip, clip)
+    jittered_data += batch_data
+    return jittered_data
+
 
 def log_string(out_str):
     LOG_FOUT.write(out_str+'\n')
@@ -195,11 +229,19 @@ def train_one_epoch(sess, ops, train_writer):
             end_idx = (batch_idx+1) * BATCH_SIZE
             
             # Augment batched point clouds by rotation and jittering
-            rotated_data = provider.rotate_point_cloud(current_data[start_idx:end_idx, :, :])
-            jittered_data = provider.jitter_point_cloud(rotated_data)
-            feed_dict = {ops['pointclouds_pl']: jittered_data,
-                         ops['labels_pl']: current_label[start_idx:end_idx],
-                         ops['is_training_pl']: is_training,}
+            # rotated_data = provider.rotate_point_cloud(current_data[start_idx:end_idx, :, :])
+            # jittered_data = provider.jitter_point_cloud(rotated_data)
+            # feed_dict = {ops['pointclouds_pl']: jittered_data,
+            #              ops['labels_pl']: current_label[start_idx:end_idx],
+            #              ops['is_training_pl']: is_training,}
+            # Augment batched point clouds by rotation and jittering
+            batch_data = current_data[start_idx:end_idx, :, :]
+            batch_label = current_label[start_idx:end_idx]
+            augmented_data = rotate_point_cloud(batch_data)
+            augmented_data = jitter_point_cloud(augmented_data)
+            feed_dict = {ops['pointclouds_pl']: augmented_data,
+                        ops['labels_pl']: batch_label,
+                        ops['is_training_pl']: is_training}
             summary, step, _, loss_val, pred_val = sess.run([ops['merged'], ops['step'],
                 ops['train_op'], ops['loss'], ops['pred']], feed_dict=feed_dict)
             train_writer.add_summary(summary, step)
