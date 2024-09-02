@@ -60,9 +60,9 @@ HOSTNAME = socket.gethostname()
 
 # ModelNet40 official train/test split
 TRAIN_FILES = provider.getDataFiles( \
-    os.path.join(BASE_DIR, '/content/drive/MyDrive/modelnet40-ply-hdf5-2048/train_files.txt'))
+    os.path.join(BASE_DIR, 'data/modelnet40_ply_hdf5_2048/train_files.txt'))
 TEST_FILES = provider.getDataFiles(\
-    os.path.join(BASE_DIR, '/content/drive/MyDrive/modelnet40-ply-hdf5-2048/test_files.txt'))
+    os.path.join(BASE_DIR, 'data/modelnet40_ply_hdf5_2048/test_files.txt'))
 
 def rotate_point_cloud(batch_data):
     """ Randomly rotate the point clouds to augment the dataset
